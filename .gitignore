@@ -281,4 +281,4 @@ coverage/
 
 # Anthropic registry temporary files
 anthropic_servers_*.json
-curated_import_list.txt
+curated_import_list.txtdeployment/viceversaco/
