@@ -4,6 +4,7 @@ import logging
 import os
 from typing import Optional
 
+from .authelia import AutheliaProvider
 from .base import AuthProvider
 from .cognito import CognitoProvider
 from .keycloak import KeycloakProvider
@@ -20,27 +21,60 @@ def get_auth_provider(
     provider_type: Optional[str] = None
 ) -> AuthProvider:
     """Factory function to get the appropriate auth provider.
-    
+
     Args:
-        provider_type: Type of provider to create ('cognito' or 'keycloak').
+        provider_type: Type of provider to create ('authelia', 'cognito', or 'keycloak').
                       If None, uses AUTH_PROVIDER environment variable.
-                      
+
     Returns:
         AuthProvider instance configured for the specified provider
-        
+
     Raises:
         ValueError: If provider type is unknown or required config is missing
     """
     provider_type = provider_type or os.environ.get('AUTH_PROVIDER', 'cognito')
-    
+
     logger.info(f"Creating authentication provider: {provider_type}")
-    
-    if provider_type == 'keycloak':
+
+    if provider_type == 'authelia':
+        return _create_authelia_provider()
+    elif provider_type == 'keycloak':
         return _create_keycloak_provider()
     elif provider_type == 'cognito':
         return _create_cognito_provider()
     else:
         raise ValueError(f"Unknown auth provider: {provider_type}")
+
+
+def _create_authelia_provider() -> AutheliaProvider:
+    """Create and configure Authelia provider."""
+    # Required configuration
+    authelia_url = os.environ.get('AUTHELIA_URL')
+    client_id = os.environ.get('AUTHELIA_CLIENT_ID')
+    client_secret = os.environ.get('AUTHELIA_CLIENT_SECRET')
+
+    # Validate required configuration
+    missing_vars = []
+    if not authelia_url:
+        missing_vars.append('AUTHELIA_URL')
+    if not client_id:
+        missing_vars.append('AUTHELIA_CLIENT_ID')
+    if not client_secret:
+        missing_vars.append('AUTHELIA_CLIENT_SECRET')
+
+    if missing_vars:
+        raise ValueError(
+            f"Missing required Authelia configuration: {', '.join(missing_vars)}. "
+            "Please set these environment variables."
+        )
+
+    logger.info(f"Initializing Authelia provider at {authelia_url}")
+
+    return AutheliaProvider(
+        authelia_url=authelia_url,
+        client_id=client_id,
+        client_secret=client_secret
+    )
 
 
 def _create_keycloak_provider() -> KeycloakProvider:
