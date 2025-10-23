@@ -151,10 +151,79 @@ class NginxConfigService:
             # Get API version from constants
             api_version = REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION
 
+            # Generate Keycloak proxy blocks conditionally based on KEYCLOAK_ENABLED
+            import os
+            keycloak_enabled = os.environ.get('KEYCLOAK_ENABLED', 'false').lower() == 'true'
+
+            if keycloak_enabled:
+                keycloak_blocks = """    # Keycloak proxy
+    location /keycloak/ {
+        proxy_pass http://keycloak:8080/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Additional Keycloak-specific headers
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Server $host;
+
+        # Buffer settings for Keycloak admin console
+        proxy_buffer_size 128k;
+        proxy_buffers 4 256k;
+        proxy_busy_buffers_size 256k;
+    }
+
+    # OAuth2 Keycloak callback endpoint
+    location /oauth2/callback/keycloak {
+        proxy_pass http://auth-server:8888/oauth2/callback/keycloak;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Pass through all headers for OAuth2 flow
+        proxy_pass_request_headers on;
+        proxy_pass_request_body on;
+    }
+
+    # OAuth2 Keycloak login endpoint
+    location /oauth2/login/keycloak {
+        proxy_pass http://auth-server:8888/oauth2/login/keycloak;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Pass through query parameters and headers
+        proxy_pass_request_headers on;
+    }
+
+    # OAuth2 Keycloak logout endpoint
+    location /oauth2/logout/keycloak {
+        proxy_pass http://auth-server:8888/oauth2/logout/keycloak;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Pass through all headers
+        proxy_pass_request_headers on;
+    }"""
+                logger.info("Keycloak proxy blocks enabled (KEYCLOAK_ENABLED=true)")
+            else:
+                keycloak_blocks = "    # Keycloak proxy disabled (KEYCLOAK_ENABLED=false)"
+                logger.info("Keycloak proxy blocks disabled (KEYCLOAK_ENABLED=false)")
+
             # Replace placeholders in template
             config_content = template_content.replace("{{LOCATION_BLOCKS}}", "\n".join(location_blocks))
             config_content = config_content.replace("{{EC2_PUBLIC_DNS}}", ec2_public_dns)
             config_content = config_content.replace("{{ANTHROPIC_API_VERSION}}", api_version)
+            config_content = config_content.replace("{{KEYCLOAK_PROXY_BLOCKS}}", keycloak_blocks)
             
             # Write config file
             with open(settings.nginx_config_path, "w") as f:
